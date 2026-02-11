@@ -1,0 +1,69 @@
+def call (Map configMap){
+    pipeline {
+        agent {
+            node {
+                label 'AGENT-1'
+            }
+        }
+        environment {
+            COURSE = "Jenkins"
+            appVersion = configMap.get("appVersion")
+            ACC_ID = "372836560231"
+            PROJECT = configMap.get("project")
+            COMPONENT = configMap.get("component")
+            deploy_to = configMap.get("deploy_to")
+            REGION = "us-east-1"
+        }
+        options {
+            timeout(time: 30, unit: 'MINUTES')
+            disableConcurrentBuilds()
+        }
+
+        parameters {
+            string(name: 'appVersion', description: 'which appVersion you want to deploy')
+            choice(name: 'deploy_to', choices: ['dev', 'qa', 'prod'], description: 'Pick something')
+            
+        }
+
+        // this is build section
+        stages {
+                
+
+            stage('Deploy') {
+                steps {
+                    script{
+                        withAWS(region:'us-east-1',credentials:'aws-creds') {
+                            sh """
+                                set -e
+                                aws eks update-kubeconfig --region ${REGION} --name ${PROJECT}-${deploy_to}
+                                kubectl get nodes
+                                sed -i "s/IMAGE_VERSION/${appVersion}/g" values.yaml
+                                helm upgrade --install ${COMPONENT} -f values-${deploy_to}.yaml -n ${PROJECT} --atomic --wait --timeout=5m .
+                            """
+                        }
+                    }
+                }
+            }
+
+        }
+
+        post {
+            always {
+                echo ' I will always say hello again '
+                cleanWs()
+            }
+
+            success {
+                echo 'I will run if success'
+            }
+            failure {
+                echo 'I will run if failure'
+            }
+            aborted {
+                echo 'pipeline is aborted'
+            }
+        }
+    }
+
+
+}
